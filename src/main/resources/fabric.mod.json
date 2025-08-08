@@ -1,0 +1,19 @@
+{
+	"schemaVersion": 1,
+	"id": "fabric-firestore",
+	"version": "${version}",
+	"name": "Fabric Firestore",
+	"description": "An extremely boilerplate mod which adds firestore as a dependency",
+	"authors": [
+		"Igrium"
+	],
+	"contact": {
+		"sources": "https://github.com/Betrayd/fabric-firestore"
+	},
+	"license": "MIT",
+	"environment": "*",
+	"depends": {
+		"fabricloader": ">=0.16.14",
+		"java": ">=17"
+	}
+}
