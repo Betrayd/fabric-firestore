@@ -37,12 +37,23 @@ dependencies {
 	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
 	api "com.google.cloud:google-cloud-firestore:${project.firestore_version}"
-	shadow "com.google.cloud:google-cloud-firestore:${project.firestore_version}"
+	shadow("com.google.cloud:google-cloud-firestore:${project.firestore_version}") {
+		// Provided by Minecraft at runtime
+		exclude group: "org.slf4j"
+		exclude group: "com.google.code.gson"
+		exclude group: "org.apache.httpcomponents"
+		exclude group: "commons-codec"
+	}
 }
 
 shadowJar {
 	configurations = [project.configurations.shadow]
 	exclude("META-INF")
+
+	// Minecraft ships an older Guava, so bundle our own under a separate package.
+	// failureaccess lives in com.google.common too, so it gets relocated along with it.
+	relocate "com.google.common", "fabricfirestore.shadow.guava"
+	relocate "com.google.thirdparty", "fabricfirestore.shadow.guava.thirdparty"
 }
 
 remapJar {
