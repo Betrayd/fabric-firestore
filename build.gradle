@@ -1,7 +1,8 @@
+
 plugins {
 	id 'fabric-loom' version '1.10-SNAPSHOT'
 	id 'maven-publish'
-	id "com.gradleup.shadow" version "9.0.0"
+	id 'com.gradleup.shadow' version '9.0.0'
 }
 
 version = project.mod_version
@@ -12,11 +13,7 @@ base {
 }
 
 repositories {
-	// Add repositories to retrieve artifacts from in here.
-	// You should only use this when depending on other mods because
-	// Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
-	// See https://docs.gradle.org/current/userguide/declaring_repositories.html
-	// for more information about repositories.
+	mavenCentral()
 }
 
 loom {
@@ -27,18 +24,22 @@ loom {
 			sourceSet sourceSets.main
 		}
 	}
+}
 
+configurations {
+	shade
+	implementation.extendsFrom(shade)
 }
 
 dependencies {
-	// To change the versions see the gradle.properties file
 	minecraft "net.minecraft:minecraft:${project.minecraft_version}"
 	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+
 	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
-	api "com.google.cloud:google-cloud-firestore:${project.firestore_version}"
-	shadow("com.google.cloud:google-cloud-firestore:${project.firestore_version}") {
-		// Provided by Minecraft at runtime
+	shade("com.google.cloud:google-cloud-firestore:${project.firestore_version}") {
+		// Keep Minecraft-provided libraries out of the shaded dependency graph.
+		// Remove an exclusion if a required class is missing at runtime.
 		exclude group: "org.slf4j"
 		exclude group: "com.google.code.gson"
 		exclude group: "org.apache.httpcomponents"
@@ -46,40 +47,49 @@ dependencies {
 	}
 }
 
-shadowJar {
-	configurations = [project.configurations.shadow]
-	exclude("META-INF")
+tasks.named('shadowJar') {
+	configurations = [project.configurations.shade]
 
-	// Minecraft ships an older Guava, so bundle our own under a separate package.
-	// failureaccess lives in com.google.common too, so it gets relocated along with it.
-	relocate "com.google.common", "fabricfirestore.shadow.guava"
-	relocate "com.google.thirdparty", "fabricfirestore.shadow.guava.thirdparty"
+	archiveClassifier = 'dev-shadow'
+
+	// Critical: allow service descriptors to reach Shadow's merger.
+	duplicatesStrategy = DuplicatesStrategy.INCLUDE
+
+	// Merge gRPC and other Java ServiceLoader registrations.
+	mergeServiceFiles()
+
+	// Discard signatures from dependency JARs; the shaded JAR changes their contents.
+	exclude 'META-INF/*.SF'
+	exclude 'META-INF/*.DSA'
+	exclude 'META-INF/*.RSA'
+
+	// Minecraft includes Guava, so isolate the dependency's copy.
+	relocate 'com.google.common', 'fabricfirestore.shadow.guava'
+	relocate 'com.google.thirdparty',
+			'fabricfirestore.shadow.guava.thirdparty'
 }
 
-remapJar {
-	// wait until the shadowJar is done
-	dependsOn(shadowJar)
-	mustRunAfter(shadowJar)
-	// Set the input jar for the task. Here use the shadow Jar that include the .class of the transitive dependency
-	inputFile = file(shadowJar.archivePath)
+tasks.named('remapJar') {
+	dependsOn tasks.named('shadowJar')
+
+	inputFile = tasks.named('shadowJar').flatMap {
+		it.archiveFile
+	}
 }
 
 processResources {
 	inputs.property "version", project.version
 
 	filesMatching("fabric.mod.json") {
-		expand "version": inputs.properties.version
+		expand "version": project.version
 	}
 }
 
 tasks.withType(JavaCompile).configureEach {
-	it.options.release = 17
+	options.release = 17
 }
 
 java {
-	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
-	// if it is present.
-	// If you remove this line, sources will not be generated.
 	withSourcesJar()
 
 	sourceCompatibility = JavaVersion.VERSION_17
@@ -90,11 +100,10 @@ jar {
 	inputs.property "archivesName", project.base.archivesName
 
 	from("LICENSE") {
-		rename { "${it}_${inputs.properties.archivesName}"}
+		rename { "${it}_${inputs.properties.archivesName}" }
 	}
 }
 
-// configure the maven publication
 publishing {
 	publications {
 		create("mavenJava", MavenPublication) {
@@ -103,11 +112,7 @@ publishing {
 		}
 	}
 
-	// See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
 	repositories {
-		// Add repositories to publish to here.
-		// Notice: This block does NOT have the same function as the block in the top level.
-		// The repositories here will be used for publishing your artifact, not for
-		// retrieving dependencies.
+		// Configure a publishing repository here if needed.
 	}
 }
